@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geolocation Speed Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f4f8;
+            margin: 0;
+            padding: 0;
+        }
+
+        h2 {
+            text-align: center;
+            background-color: #4CAF50;
+            color: white;
+            padding: 1rem;
+            margin: 0;
+        }
+
+        #details {
+            background: white;
+            margin: 20px auto;
+            padding: 20px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            border-radius: 10px;
+            line-height: 1.6;
+        }
+
+        #map-frame {
+            display: block;
+            margin: 20px auto;
+            width: 90%;
+            max-width: 500px;
+            height: 300px;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        small a {
+            display: block;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Geolocation Speed Tracker</h2>
+    <div id="details">Waiting for location data...</div>
+    <iframe id="map-frame" loading="lazy"></iframe>
+    <small>
+        <a id="map-link" href="#" target="_blank">See map bigger</a>
+    </small>
+
+    <script>
+        let reqcount = 0;
+        const details = document.getElementById("details");
+        const mapFrame = document.getElementById("map-frame");
+        const mapLink = document.getElementById("map-link");
+
+        let lastCoords = null;
+        let lastTimestamp = null;
+
+        function haversine(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const toRad = deg => deg * Math.PI / 180;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) ** 2 +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                      Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        function updateMap(lat, lon) {
+            const embedURL = `https://maps.google.com/maps?q=${lat},${lon}&z=15&output=embed`;
+            const linkURL = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+            mapFrame.src = embedURL;
+            mapLink.href = linkURL;
+        }
+
+        function successCallback(position) {
+            const { accuracy, latitude, longitude, altitude, heading, speed } = position.coords;
+            const timestamp = position.timestamp;
+
+            reqcount++;
+
+            let output = `
+                <strong>Request Count:</strong> ${reqcount}<br>
+                <strong>Accuracy:</strong> ${accuracy} meters<br>
+                <strong>Latitude:</strong> ${latitude}<br>
+                <strong>Longitude:</strong> ${longitude}<br>
+                <strong>Altitude:</strong> ${altitude !== null ? altitude + " m" : "Not available"}<br>
+                <strong>Heading:</strong> ${heading !== null ? heading + "°" : "Not available"}<br>
+            `;
+
+            let calculatedSpeedKmh = null;
+
+            if (speed !== null) {
+                calculatedSpeedKmh = (speed * 3.6).toFixed(2);
+            } else if (lastCoords && lastTimestamp) {
+                const dist = haversine(lastCoords.latitude, lastCoords.longitude, latitude, longitude);
+                const timeDiff = (timestamp - lastTimestamp) / 1000;
+                if (timeDiff > 0) {
+                    const speedMs = dist / timeDiff;
+                    calculatedSpeedKmh = (speedMs * 3.6).toFixed(2);
+                }
+            }
+
+            output += `<strong>Speed:</strong> ${calculatedSpeedKmh !== null ? calculatedSpeedKmh + " km/h" : "Not available"}<br>`;
+            output += `<strong>Timestamp:</strong> ${new Date(timestamp).toLocaleString()}<br>`;
+
+            details.innerHTML = output;
+
+            lastCoords = { latitude, longitude };
+            lastTimestamp = timestamp;
+
+            updateMap(latitude, longitude);
+        }
+
+        function errorCallback(error) {
+            details.innerHTML = `
+                <strong>Error getting location:</strong> ${error.message}<br>
+                <em>Try enabling GPS/location services or using a device with GPS.</em>
+            `;
+        }
+
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        };
+
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(successCallback, errorCallback, options);
+        } else {
+            details.innerHTML = "Geolocation is not supported by your browser.";
+        }
+    </script>
+</body>
+</html>
